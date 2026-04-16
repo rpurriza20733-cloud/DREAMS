@@ -343,8 +343,6 @@ const todayStr = () => isoDate(new Date());
 //  DREAMS IN v4.1 — CONEXIÓN GOOGLE SHEETS
 // ══════════════════════════════════════════════════════════════════════════
 const API_KEY = 'dreams2026secret';
-// URL del Apps Script — se puede guardar desde la pantalla de configuración
-const API_KEY = 'dreams2026secret';
 const API_URL = 'https://script.google.com/macros/s/AKfycbw9a7yvZOTZnsvNvdmInB90T2rrdr4qKBDxrc1A0F72t-g0RYqcTQigcOeBIZoGvoGjQQ/exec';
 
 // ─── CACHÉ EN MEMORIA ────────────────────────────────────────────────────
@@ -399,19 +397,7 @@ function showSetupScreen() {
 }
 
 async function saveAndConnect() {
-  const inp = document.getElementById('urlInput');
-  const err = document.getElementById('urlErr');
-  const val = (inp ? inp.value.trim() : '');
-  if(!val.startsWith('https://script.google.com')) {
-    if(err) err.textContent = 'La URL debe comenzar con https://script.google.com';
-    return;
-  }
-  localStorage.setItem('di_api_url', val);
-  API_URL = val;
-  document.body.innerHTML = '';
-  document.body.style.cssText = '';
-  const ok = await loadAllData();
-  if(ok) renderLanding();
+  location.reload();
 }
 
 // ─── OVERLAY DE CARGA ────────────────────────────────────────────────────
@@ -532,7 +518,6 @@ async function loadAllData() {
       '<div style="font-size:2.5rem;margin-bottom:.8rem">\u26a0\ufe0f</div>' +
       '<div style="color:#fff;font-size:1.05rem;font-weight:700;margin-bottom:.4rem">No se pudo conectar</div>' +
       '<div style="color:rgba(255,255,255,.6);font-size:.82rem;margin-bottom:1.4rem;max-width:320px;line-height:1.5">' + e.message + '</div>' +
-      '<button onclick="localStorage.removeItem(\'di_api_url\');location.reload()" style="padding:.6rem 1.6rem;border-radius:10px;border:1px solid rgba(255,255,255,.2);background:rgba(255,255,255,.12);color:#fff;cursor:pointer;font-size:.88rem;font-weight:600;font-family:inherit;margin-right:.5rem">\u2699\ufe0f Reconfigurar</button>' +
       '<button onclick="location.reload()" style="padding:.6rem 1.6rem;border-radius:10px;border:1px solid rgba(255,255,255,.2);background:rgba(255,255,255,.12);color:#fff;cursor:pointer;font-size:.88rem;font-weight:600;font-family:inherit">\ud83d\udd04 Reintentar</button>';
     return false;
   }
@@ -1572,11 +1557,9 @@ function admSave(){
 }
 
 // ── BOOT — conecta con Google Sheets al cargar ───────────────
-if(API_URL) {
-  loadAllData().then(function(ok){ if(ok) renderLanding(); });
-} else {
-  showSetupScreen();
-}
+loadAllData().then(function(ok){
+  if(ok) renderLanding();
+});
 
 </script>
 </body>
