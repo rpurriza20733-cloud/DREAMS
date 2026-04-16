@@ -344,10 +344,8 @@ const todayStr = () => isoDate(new Date());
 // ══════════════════════════════════════════════════════════════════════════
 const API_KEY = 'dreams2026secret';
 // URL del Apps Script — se puede guardar desde la pantalla de configuración
-let API_URL = (function(){
-  const saved = localStorage.getItem('di_api_url');
-  return (saved && saved.startsWith('https://')) ? saved : '';
-})();
+const API_KEY = 'dreams2026secret';
+const API_URL = 'https://script.google.com/macros/s/AKfycbw9a7yvZOTZnsvNvdmInB90T2rrdr4qKBDxrc1A0F72t-g0RYqcTQigcOeBIZoGvoGjQQ/exec';
 
 // ─── CACHÉ EN MEMORIA ────────────────────────────────────────────────────
 const CACHE = { cfg: null, reps: [], sales: [], goals: [] };
