@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
-<title>Dreams IN — Sistema de Resultados v4.1</title>
+<title>Dreams IN — Sistema de Resultados v5</title>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet"/>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
 <style>
@@ -346,7 +346,7 @@ const API_KEY = 'dreams2026secret';
 const API_URL = 'https://script.google.com/macros/s/AKfycbw9a7yvZOTZnsvNvdmInB90T2rrdr4qKBDxrc1A0F72t-g0RYqcTQigcOeBIZoGvoGjQQ/exec';
 
 // ─── CACHÉ EN MEMORIA ────────────────────────────────────────────────────
-const CACHE = { cfg: null, reps: [], sales: [], goals: [] };
+const CACHE = { cfg: null, reps: [], sales: [], goals: [], anticips: [] };
 
 // ─── CLIENTE API ─────────────────────────────────────────────────────────
 async function apiGet(action, params) {
@@ -430,7 +430,8 @@ async function loadAllData() {
       apiGet('getMesas'),
       apiGet('getReportes'),
       apiGet('getVentas'),
-      apiGet('getMetas', {})
+      apiGet('getMetas', {}),
+      apiGet('getAnticipos')
     ]);
     const usuarios = results[0];
     const distribuciones = results[1];
@@ -438,6 +439,7 @@ async function loadAllData() {
     const reportes = results[3];
     const ventas = results[4];
     const metas = results[5];
+    const anticips = results[6] || [];
 
     const admUser = usuarios.find(function(u){ return (u.Rol||u.rol||'').toLowerCase()==='admin'; });
     CACHE.cfg = {
@@ -512,12 +514,29 @@ async function loadAllData() {
       monto: Number(m.Monto)||0
     }; });
 
+    CACHE.anticips = anticips.map(function(a){ return {
+      id: String(a.ID||a.id||''),
+      venta_id: String(a.Venta_ID||a.venta_id||''),
+      vendedor_id: String(a.Vendedor_ID||a.vendedor_id||''),
+      vendedor_nombre: String(a.Vendedor_Nombre||a.vendedor_nombre||''),
+      dist_id: String(a.Dist_ID||a.dist_id||''),
+      mesa_id: String(a.Mesa_ID||a.mesa_id||''),
+      mesa_nombre: String(a.Mesa_Nombre||a.mesa_nombre||''),
+      monto: Number(a.Monto)||0,
+      forma_pago: String(a.Forma_Pago||a.forma_pago||''),
+      status: String(a.Status||a.status||'pendiente'),
+      fecha: String(a.Fecha||a.fecha||''),
+      referencia: String(a.Referencia||a.referencia||''),
+      notas: String(a.Notas||a.notas||''),
+      ts: Number(a.Timestamp||a.timestamp||Date.now())
+    }; });
+
   } catch(e) {
     const ov = document.getElementById('di-ov');
     if(ov) ov.innerHTML =
       '<div style="font-size:2.5rem;margin-bottom:.8rem">\u26a0\ufe0f</div>' +
       '<div style="color:#fff;font-size:1.05rem;font-weight:700;margin-bottom:.4rem">No se pudo conectar</div>' +
-      '<div style="color:rgba(255,255,255,.6);font-size:.82rem;margin-bottom:1.4rem;max-width:320px;line-height:1.5">' + e.message + '</div>' +
+      '<div style="color:rgba(255,255,255,.6);font-size:.82rem;margin-bottom:1.4rem;max-width:320px;line-height:1.5">' + String(e.message||'Error de conexión').slice(0,200).replace(/</g,'&lt;').replace(/>/g,'&gt;') + '</div>' +
       '<button onclick="location.reload()" style="padding:.6rem 1.6rem;border-radius:10px;border:1px solid rgba(255,255,255,.2);background:rgba(255,255,255,.12);color:#fff;cursor:pointer;font-size:.88rem;font-weight:600;font-family:inherit">\ud83d\udd04 Reintentar</button>';
     return false;
   }
@@ -525,6 +544,33 @@ async function loadAllData() {
   return true;
 }
 
+
+async function reloadCacheConfig(){
+  try{
+    const [usuarios,distribuciones,mesas]=await Promise.all([
+      apiGet('getUsuarios'),apiGet('getDistribuciones'),apiGet('getMesas')
+    ]);
+    const admUser=usuarios.find(function(u){return(u.Rol||u.rol||'').toLowerCase()==='admin';});
+    CACHE.cfg={
+      admin_password:admUser?String(admUser.PIN||admUser.pin||'dreams2026'):'dreams2026',
+      vendedores:usuarios.filter(function(u){return(u.Rol||u.rol||'').toLowerCase()==='asesor';}).map(function(u){
+        return{id:String(u.ID||u.id||''),nombre:String(u.Nombre||u.nombre||''),pin:String(u.PIN||u.pin||''),
+          dist_id:String(u.Dist_ID||u.dist_id||''),activo:(u.Activo||u.activo)!=='0'&&(u.Activo||u.activo)!==false,
+          telefono:String(u.Telefono||u.telefono||''),email:String(u.Email||u.email||'')};
+      }),
+      distribuciones:distribuciones.map(function(d){
+        return{id:String(d.ID||d.id||''),nombre:String(d.Nombre||d.nombre||''),
+          manager_nombre:String(d.Manager_Nombre||d.manager_nombre||''),
+          manager_wa:String(d.Manager_WA||d.manager_wa||''),password:String(d.Password||d.password||'')};
+      }),
+      mesas:mesas.map(function(m){
+        return{id:String(m.ID||m.id||''),nombre:String(m.Nombre||m.nombre||''),
+          password:String(m.Password||m.password||''),
+          distribuciones:String(m.Distribuciones||m.distribuciones||'').split(',').map(function(x){return x.trim();}).filter(Boolean)};
+      })
+    };
+  }catch(e){toast('❌ Error recargando config: '+e.message,'er');}
+}
 
 const LS = {
   get:(k,d)=>{
@@ -944,7 +990,8 @@ async function submitReporte(){
     CACHE.reps.push(rep);
     salesArr.forEach(s=>CACHE.sales.push({id:uid(),reporte_id:repId,vendedor_id:vid,vendedor_nombre:v.nombre,dist_id:v.dist_id||'',dist_nombre:dist?dist.nombre:'',fecha,ts,cliente:s.cliente,monto:s.monto,status:'en_verificacion',mesa_id:'',mesa_ts:null}));
     const waNum=dist?dist.manager_wa:'';
-    const msg=`\u{1F31F} *Dreams IN \u2014 Reporte ${fecha}*\n\n\u{1F464} ${v.nombre}\n\u{1F3E2} ${dist?dist.nombre:''}\n\n\u{1F4CA} *Prospecci\u00F3n:*\n\u{1F381} Prog. Regalo: ${programas_regalo}\n\u{1F4DE} Contactos: ${contactos}\n\u{1F91D} Citas: ${citas}\n\n\u{1F4BC} *Comercial:*\n\u{1F4C5} Citas del d\u00EDa: ${citas_dia}\n\u{1F3AC} Demos: ${demos}\n\u{1F6D2} Ventas: ${ventas}\n\u{1F4B0} Volumen: ${fmt(totalMonto)}\n\n\u2705 Reporte guardado.`;
+    const fecha_lbl=new Date().toLocaleDateString('es-MX',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
+    const msg=`Hola, qu\u00E9 tal. Le saluda *${v.nombre}*. Env\u00EDo mi reporte de actividades correspondiente al d\u00EDa *${fecha_lbl}*.\n\n*\u{1F4CA} Indicadores del d\u00EDa:*\n\u{1F381} Prog. de Regalo: ${programas_regalo}\n\u{1F4DE} Contactos realizados: ${contactos}\n\u{1F91D} Citas agendadas: ${citas}\n\u{1F4C5} Citas del d\u00EDa: ${citas_dia}\n\u{1F3AC} Demos realizadas: ${demos}\n\u{1F6D2} Ventas cerradas: ${ventas}\n\u{1F4B0} Volumen generado: ${fmt(totalMonto)}\n\nQuedo a sus \u00F3rdenes para cualquier seguimiento.`;
     const waLink=`https://wa.me/${waNum}?text=${encodeURIComponent(msg)}`;
     app.innerHTML=`
     <div class="card">
@@ -979,7 +1026,7 @@ function asesorVentas(){
   const volTot=fSales.reduce((a,s)=>a+s.monto,0);
   const pctAp=pct(volAp,volTot);
   const stC={en_verificacion:'sv',aprobada:'sa',pre_archivada:'sp',rechazada:'sr'};
-  const stL={en_verificacion:'En Verif.',aprobada:'Aprobada',pre_archivada:'Pre Arch.',rechazada:'Rechazada'};
+  const stL={en_verificacion:'En Verif.',aprobada:'Aprobada',pre_archivada:'Aprobada',rechazada:'Rechazada'};
   const sorted=fSales.sort((a,b)=>b.ts-a.ts);
   const rows=sorted.map(s=>`<tr><td>${s.fecha}</td><td><b>${s.cliente}</b></td><td>${fmt(s.monto)}</td><td><span class="sb ${stC[s.status]||'sv'}">${stL[s.status]||s.status}</span></td></tr>`).join('');
   app.innerHTML=`
@@ -1085,7 +1132,8 @@ function loginDist(){
     {id:'dr',label:'📊 Resumen',fn:'distResumen()'},
     {id:'de',label:'👥 Equipo',fn:'distEquipo()'},
     {id:'dk',label:'📈 KPIs & Conversiones',fn:'distKpis()'},
-    {id:'dt',label:'📉 Tendencias',fn:'distTendencias()'}
+    {id:'dt',label:'📉 Tendencias',fn:'distTendencias()'},
+    {id:'do',label:'🛒 Órdenes',fn:'distOrdenes()'}
   ]);
   distResumen();
 }
@@ -1220,6 +1268,32 @@ function distTendencias(){
 // ════════════════════════════════════════════════
 //  MESA DE CONTROL
 // ════════════════════════════════════════════════
+function distOrdenes(){
+  setTab('do');
+  const cfg=getCfg(),did=S.id;
+  const sales=getSales().filter(s=>s.dist_id===did);
+  const fSales=filtered(sales);
+  const ev=fSales.filter(s=>s.status==='en_verificacion');
+  const ap=fSales.filter(s=>s.status==='aprobada');
+  const stC={en_verificacion:'sv',aprobada:'sa',pre_archivada:'sp',rechazada:'sr'};
+  const stL={en_verificacion:'En Verificación',aprobada:'Aprobada',pre_archivada:'Pre Archivada',rechazada:'Rechazada'};
+  const rows=fSales.sort((a,b)=>b.ts-a.ts).map(s=>{
+    const v=cfg.vendedores.find(x=>x.id===s.vendedor_id);
+    return`<tr><td>${s.fecha}</td><td><b>${s.cliente}</b></td><td>${v?v.nombre:s.vendedor_nombre}</td><td>${fmt(s.monto)}</td><td><span class="sb ${stC[s.status]||'sv'}">${stL[s.status]||s.status}</span></td></tr>`;
+  }).join('');
+  app.innerHTML=`
+  ${fbar('distOrdenes')}
+  <div class="mets">
+    <div class="met"><div class="mval">${ev.length}</div><div class="mlbl">Por Verificar</div></div>
+    <div class="met mg"><div class="mval">${ap.length}</div><div class="mlbl">Aprobadas</div></div>
+    <div class="met mb"><div class="mval">${fmt(ap.reduce((a,s)=>a+s.monto,0))}</div><div class="mlbl">Vol. Aprobado</div></div>
+  </div>
+  <div class="card">
+    <div class="chd"><div class="chi chi-b">🛒</div><div class="cht">Órdenes del Período</div></div>
+    ${fSales.length?`<div class="twrap"><table class="tbl"><thead><tr><th>Fecha</th><th>Cliente</th><th>Asesor</th><th>Monto</th><th>Estatus</th></tr></thead><tbody>${rows}</tbody></table></div>`:'<div class="empty">Sin órdenes en este período</div>'}
+  </div>`;
+}
+
 function renderMesaLogin(){
   const cfg=getCfg();
   const opts=cfg.mesas.map(m=>`<option value="${m.id}">${m.nombre}</option>`).join('');
@@ -1248,7 +1322,8 @@ function doLoginMesa(){
     {id:'mv',label:'📥 Por Verificar',fn:"mesaVer('por_verificar')"},
     {id:'ma',label:'✅ Aprobadas',fn:"mesaVer('aprobadas')"},
     {id:'mp',label:'📁 Pre Archivadas',fn:"mesaVer('pre_archivadas')"},
-    {id:'mre',label:'❌ Rechazadas',fn:"mesaVer('rechazadas')"}
+    {id:'mre',label:'❌ Rechazadas',fn:"mesaVer('rechazadas')"},
+    {id:'mant',label:'💵 Anticipos',fn:'mesaAnticipos()'}
   ]);
   mesaResumen();
 }
@@ -1355,6 +1430,99 @@ async function mesaAccion(sid,ns,fl){
 // ════════════════════════════════════════════════
 //  ADMIN
 // ════════════════════════════════════════════════
+function mesaAnticipos(){
+  setTab('mant');
+  const cfg=getCfg(),mid=S.id;
+  const mesa=cfg.mesas.find(m=>m.id===mid);
+  const anticips=CACHE.anticips.filter(a=>a.mesa_id===mid);
+  const fAnts=filtered(anticips,'fecha');
+  const total=fAnts.reduce((a,x)=>a+x.monto,0);
+  const rows=fAnts.sort((a,b)=>(b.ts||0)-(a.ts||0)).map(a=>`
+    <tr>
+      <td>${a.fecha}</td>
+      <td><b>${a.vendedor_nombre}</b></td>
+      <td>${fmt(a.monto)}</td>
+      <td>${a.forma_pago||'—'}</td>
+      <td><span class="sb ${a.status==='pagado'?'sa':'sv'}">${a.status==='pagado'?'Pagado':'Pendiente'}</span></td>
+      <td>${a.status!=='pagado'?`<button class="btn bs bxs" onclick="antPagar('${a.id}')">&#x2713; Pagar</button>`:'—'}</td>
+    </tr>`).join('');
+  app.innerHTML=`
+  ${fbar('mesaAnticipos')}
+  <div class="mets">
+    <div class="met"><div class="mval">${fAnts.filter(a=>a.status!=='pagado').length}</div><div class="mlbl">Pendientes</div></div>
+    <div class="met mg"><div class="mval">${fAnts.filter(a=>a.status==='pagado').length}</div><div class="mlbl">Pagados</div></div>
+    <div class="met mb"><div class="mval">${fmt(total)}</div><div class="mlbl">Monto Total</div></div>
+  </div>
+  <div class="card">
+    <div class="chd"><div class="chi chi-a">💵</div><div class="cht">Anticipos</div>
+      <button class="btn bp bsm" style="margin-left:auto" onclick="antRegistrar()">+ Registrar</button>
+    </div>
+    ${fAnts.length?`<div class="twrap"><table class="tbl"><thead><tr><th>Fecha</th><th>Asesor</th><th>Monto</th><th>Forma Pago</th><th>Estatus</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>`:'<div class="empty">Sin anticipos en este período</div>'}
+  </div>`;
+}
+
+function antRegistrar(){
+  const cfg=getCfg(),mid=S.id;
+  const mesa=cfg.mesas.find(m=>m.id===mid);
+  const vends=cfg.vendedores.filter(v=>mesa.distribuciones.includes(v.dist_id)&&v.activo);
+  const opts=vends.map(v=>`<option value="${v.id}">${v.nombre}</option>`).join('');
+  app.innerHTML=`<div class="card">
+    <div class="chd"><div class="chi chi-a">💵</div><div class="cht">Registrar Anticipo</div></div>
+    <div class="fld"><label>Asesor</label><select id="ant_vid">${opts}</select></div>
+    <div class="g2">
+      <div class="fld"><label>Monto ($)</label><input type="number" id="ant_monto" min="0" placeholder="0"/></div>
+      <div class="fld"><label>Forma de Pago</label>
+        <select id="ant_forma">
+          <option value="Efectivo">Efectivo</option>
+          <option value="Transferencia">Transferencia</option>
+          <option value="Tarjeta">Tarjeta</option>
+        </select>
+      </div>
+    </div>
+    <div class="fld"><label>Referencia / Notas</label><textarea id="ant_notas" placeholder="Número de referencia, notas..."></textarea></div>
+    <div style="display:flex;gap:.65rem;margin-top:.2rem">
+      <button class="btn bg" onclick="mesaAnticipos()">← Volver</button>
+      <button class="btn bs bfull" onclick="antRegistrarSave()">💾 Registrar Anticipo</button>
+    </div>
+  </div>`;
+}
+
+async function antRegistrarSave(){
+  const cfg=getCfg(),mid=S.id;
+  const mesa=cfg.mesas.find(m=>m.id===mid);
+  const vid=g('ant_vid')?.value;
+  const monto=parseFloat(g('ant_monto')?.value)||0;
+  const forma=g('ant_forma')?.value||'Efectivo';
+  const notas=g('ant_notas')?.value.trim()||'';
+  if(!vid||monto<=0){toast('Completa todos los campos','er');return;}
+  const v=cfg.vendedores.find(x=>x.id===vid);
+  const btn=document.querySelector('[onclick="antRegistrarSave()"]');
+  if(btn){btn.disabled=true;btn.innerHTML='⏳ Guardando...';}
+  try{
+    const res=await apiPost('createAnticipo',{
+      vendedor_id:vid,vendedor_nombre:v?v.nombre:'',
+      dist_id:v?v.dist_id:'',mesa_id:mid,mesa_nombre:mesa?mesa.nombre:'',
+      monto,forma_pago:forma,status:'pendiente',
+      fecha:todayStr(),referencia:'',notas
+    });
+    CACHE.anticips.push({id:res.id||uid(),vendedor_id:vid,vendedor_nombre:v?v.nombre:'',dist_id:v?v.dist_id:'',mesa_id:mid,mesa_nombre:mesa?mesa.nombre:'',monto,forma_pago:forma,status:'pendiente',fecha:todayStr(),notas,ts:Date.now()});
+    toast('✅ Anticipo registrado','ok');mesaAnticipos();
+  }catch(e){
+    if(btn){btn.disabled=false;btn.innerHTML='💾 Registrar Anticipo';}
+    toast('❌ Error: '+e.message,'er');
+  }
+}
+
+async function antPagar(aid){
+  const ant=CACHE.anticips.find(a=>a.id===aid);
+  if(!ant)return;
+  try{
+    await apiPost('updateAnticipo',{id:aid,status:'pagado'});
+    ant.status='pagado';
+    toast('✅ Anticipo marcado como pagado','ok');mesaAnticipos();
+  }catch(e){toast('❌ Error: '+e.message,'er');}
+}
+
 function renderAdminLogin(){
   app.innerHTML=`
   <div class="card">
@@ -1484,7 +1652,7 @@ function adminTab(tab){
       <td><span class="sb ${v.activo?'sa':'sr'}">${v.activo?'Activo':'Inactivo'}</span></td>
       <td><div style="display:flex;gap:.28rem">
         ${v.activo?`<button class="btn bg bxs" onclick="admOff('${v.id}')">⏸</button>`:`<button class="btn bs bxs" onclick="admOn('${v.id}')">▶</button>`}
-        <button class="btn bg bxs" onclick="admPin('${v.id}')">🔑</button>
+        <button class="btn bg bxs" onclick="admEdit('${v.id}')">✏️</button>
         <button class="btn bd bxs" onclick="admDel('${v.id}')">✕</button>
       </div></td></tr>`;
     }).join('');
@@ -1501,18 +1669,18 @@ function adminTab(tab){
     }).join('');
     app.innerHTML=`<div class="card">
       <div class="chd"><div class="chi chi-g">🏢</div><div class="cht">Distribuciones</div><button class="btn bp bsm" style="margin-left:auto" onclick="admAddDist()">+ Añadir</button></div>
-      <div class="twrap"><table class="tbl"><thead><tr><th>Nombre</th><th>Manager</th><th>Asesores</th><th>Volumen</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>
+      <div class="twrap"><table class="tbl"><thead><tr><th>Nombre</th><th>Líder</th><th>Asesores</th><th>Volumen</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>
     </div>`;
 
   } else if(tab==='reportes'){
     const sorted=[...reps].sort((a,b)=>b.ts-a.ts).slice(0,50);
-    const rows=sorted.map(r=>`<tr><td>${r.fecha}</td><td><b>${r.vendedor_nombre}</b></td><td>${r.contactos||0}</td><td>${r.citas||0}</td><td>${r.demos||0}</td><td>${r.ventas||0}</td><td>${fmt(r.monto||0)}</td></tr>`).join('');
+    const rows=sorted.map(r=>`<tr><td>${r.fecha}</td><td><b>${r.vendedor_nombre}</b></td><td style="font-size:.7rem;color:var(--s500)">${r.dist_nombre||''}</td><td>${r.contactos||0}</td><td>${r.citas||0}</td><td>${r.demos||0}</td><td>${r.ventas||0}</td><td>${fmt(r.monto||0)}</td><td style="font-size:.7rem;color:var(--s500)">${r.comentarios||''}</td></tr>`).join('');
     app.innerHTML=`
     <div style="display:flex;justify-content:flex-end;margin-bottom:.65rem">
       <button class="btn bd bsm" onclick="admClear()">🗑️ Limpiar todo</button>
     </div>
     <div class="card"><div class="chd"><div class="chi chi-s">📋</div><div class="cht">Últimos 50 reportes</div></div>
-      <div class="twrap"><table class="tbl"><thead><tr><th>Fecha</th><th>Asesor</th><th>Cont.</th><th>Citas</th><th>Demos</th><th>Ventas</th><th>Monto</th></tr></thead><tbody>${rows||'<tr><td colspan="7" class="empty">Sin reportes</td></tr>'}</tbody></table></div>
+      <div class="twrap"><table class="tbl"><thead><tr><th>Fecha</th><th>Asesor</th><th>Dist.</th><th>Cont.</th><th>Citas</th><th>Demos</th><th>Ventas</th><th>Monto</th><th>Notas</th></tr></thead><tbody>${rows||'<tr><td colspan="7" class="empty">Sin reportes</td></tr>'}</tbody></table></div>
     </div>`;
 
   } else if(tab==='config'){
@@ -1520,8 +1688,8 @@ function adminTab(tab){
       <div class="ksec ksec-g">
         <div class="khd"><div class="kdot kdot-g"></div><div class="ktxt">${d.nombre}</div></div>
         <div class="g2">
-          <div class="fld"><label>Manager</label><input type="text" id="cm_${d.id}" value="${d.manager_nombre}"/></div>
-          <div class="fld"><label>WhatsApp Manager</label><input type="text" id="cw_${d.id}" value="${d.manager_wa||''}"/></div>
+          <div class="fld"><label>Líder</label><input type="text" id="cm_${d.id}" value="${d.manager_nombre}"/></div>
+          <div class="fld"><label>WhatsApp Líder</label><input type="text" id="cw_${d.id}" value="${d.manager_wa||''}"/></div>
         </div>
         <div class="fld"><label>Contraseña Distribuidor</label><input type="text" id="cp_${d.id}" value="${d.password}"/></div>
       </div>`).join('');
@@ -1530,30 +1698,244 @@ function adminTab(tab){
       <div class="chd"><div class="chi chi-r">⚙️</div><div class="cht">Configuración del Sistema</div></div>
       <div class="fld"><label>Contraseña Admin</label><input type="text" id="ca_pw" value="${cfg.admin_password}"/></div>
       <div class="slbl"><span>Distribuciones</span></div>${dFlds}
-      <div class="slbl"><span>Mesa de Control</span></div>${mFlds}
+      <div class="slbl" style="display:flex;align-items:center;justify-content:space-between"><span>Mesa de Control</span><button class="btn bp bsm" onclick="admAddMesa()">+ Nueva Mesa</button></div>${mFlds}
       <button class="btn bs bfull" style="margin-top:.4rem" onclick="admSave()">💾 Guardar cambios</button>
     </div>`;
   }
 }
 
-// Admin actions
-function admOff(v){const c=getCfg(),x=c.vendedores.find(e=>e.id===v);if(x){x.activo=false;LS.set('di_cfg',c);toast('Inactivado','ok');adminTab('asesores');}}
-function admOn(v){const c=getCfg(),x=c.vendedores.find(e=>e.id===v);if(x){x.activo=true;LS.set('di_cfg',c);toast('Activado','ok');adminTab('asesores');}}
-function admPin(v){const p=prompt('Nuevo PIN:');if(!p)return;const c=getCfg(),x=c.vendedores.find(e=>e.id===v);if(x){x.pin=p;LS.set('di_cfg',c);toast('PIN actualizado','ok');}}
-function admDel(v){if(!confirm('¿Eliminar asesor?'))return;const c=getCfg();c.vendedores=c.vendedores.filter(e=>e.id!==v);LS.set('di_cfg',c);toast('Eliminado','ok');adminTab('asesores');}
-function admAdd(){const c=getCfg();const n=prompt('Nombre completo:');if(!n)return;const p=prompt('PIN inicial:');if(!p)return;const did=c.distribuciones[0]?.id||'D01';c.vendedores.push({id:'V'+uid(),nombre:n,pin:p,dist_id:did,activo:true});LS.set('di_cfg',c);toast('Asesor añadido','ok');adminTab('asesores');}
-function admAddDist(){const c=getCfg();const n=prompt('Nombre:');if(!n)return;const p=prompt('Contraseña:');if(!p)return;const mn=prompt('Manager:');c.distribuciones.push({id:'D'+uid(),nombre:n,manager_nombre:mn||'',manager_wa:'',password:p});LS.set('di_cfg',c);toast('Distribución añadida','ok');adminTab('dists');}
-function admEditDist(did){const c=getCfg(),d=c.distribuciones.find(x=>x.id===did);if(!d)return;const p=prompt(`Contraseña actual: ${d.password}\nNueva contraseña:`);if(p){d.password=p;LS.set('di_cfg',c);toast('Actualizado','ok');adminTab('dists');}}
+// Admin actions — API backed
+async function admOff(vid){
+  try{
+    await apiPost('updateUsuario',{id:vid,activo:'false'});
+    const c=getCfg(),x=c.vendedores.find(e=>e.id===vid);
+    if(x){x.activo=false;CACHE.cfg=c;}
+    toast('Asesor inactivado','ok');adminTab('asesores');
+  }catch(e){toast('❌ '+e.message,'er');}
+}
+async function admOn(vid){
+  try{
+    await apiPost('updateUsuario',{id:vid,activo:'true'});
+    const c=getCfg(),x=c.vendedores.find(e=>e.id===vid);
+    if(x){x.activo=true;CACHE.cfg=c;}
+    toast('Asesor activado','ok');adminTab('asesores');
+  }catch(e){toast('❌ '+e.message,'er');}
+}
+async function admDel(vid){
+  if(!confirm('¿Desactivar este asesor? Sus datos históricos se conservarán.'))return;
+  try{
+    await apiPost('updateUsuario',{id:vid,activo:'false'});
+    const c=getCfg(),x=c.vendedores.find(e=>e.id===vid);
+    if(x){x.activo=false;CACHE.cfg=c;}
+    toast('Asesor desactivado','ok');adminTab('asesores');
+  }catch(e){toast('❌ '+e.message,'er');}
+}
+function admEdit(vid){
+  const cfg=getCfg(),v=cfg.vendedores.find(x=>x.id===vid);
+  if(!v)return;
+  const opts=cfg.distribuciones.map(d=>`<option value="${d.id}"${d.id===v.dist_id?' selected':''}>${d.nombre}</option>`).join('');
+  app.innerHTML=`<div class="card">
+    <div class="chd"><div class="chi chi-b">✏️</div><div class="cht">Editar Asesor</div></div>
+    <div class="fld"><label>Nombre</label><input type="text" id="ea_nom" value="${v.nombre}"/></div>
+    <div class="g2">
+      <div class="fld"><label>PIN</label><input type="text" id="ea_pin" value="${v.pin}"/></div>
+      <div class="fld"><label>Distribución</label><select id="ea_did">${opts}</select></div>
+    </div>
+    <div class="g2">
+      <div class="fld"><label>Teléfono</label><input type="text" id="ea_tel" value="${v.telefono||''}"/></div>
+      <div class="fld"><label>Email</label><input type="email" id="ea_email" value="${v.email||''}"/></div>
+    </div>
+    <div style="display:flex;gap:.65rem;margin-top:.2rem">
+      <button class="btn bg" onclick="adminTab('asesores')">← Volver</button>
+      <button class="btn bs bfull" onclick="admEditSave('${vid}')">&#128190; Guardar</button>
+    </div>
+  </div>`;
+}
+async function admEditSave(vid){
+  const nom=g('ea_nom')?.value.trim();
+  const pin=g('ea_pin')?.value.trim();
+  const did=g('ea_did')?.value;
+  const tel=g('ea_tel')?.value.trim();
+  const email=g('ea_email')?.value.trim();
+  if(!nom||!pin){toast('Nombre y PIN requeridos','er');return;}
+  const btn=document.querySelector(`[onclick="admEditSave('${vid}')"]`);
+  if(btn){btn.disabled=true;btn.innerHTML='⏳ Guardando...';}
+  try{
+    await apiPost('updateUsuario',{id:vid,nombre:nom,pin,dist_id:did,telefono:tel,email});
+    const c=getCfg(),x=c.vendedores.find(e=>e.id===vid);
+    if(x){x.nombre=nom;x.pin=pin;x.dist_id=did;x.telefono=tel;x.email=email;CACHE.cfg=c;}
+    toast('✅ Asesor actualizado','ok');adminTab('asesores');
+  }catch(e){
+    if(btn){btn.disabled=false;btn.innerHTML='&#128190; Guardar';}
+    toast('❌ '+e.message,'er');
+  }
+}
+function admAdd(){
+  const cfg=getCfg();
+  const opts=cfg.distribuciones.map(d=>`<option value="${d.id}">${d.nombre}</option>`).join('');
+  app.innerHTML=`<div class="card">
+    <div class="chd"><div class="chi chi-b">➕</div><div class="cht">Nuevo Asesor</div></div>
+    <div class="fld"><label>Nombre completo</label><input type="text" id="na_nom" placeholder="Nombre Apellido"/></div>
+    <div class="g2">
+      <div class="fld"><label>PIN de acceso</label><input type="text" id="na_pin" placeholder="1234"/></div>
+      <div class="fld"><label>Distribución</label><select id="na_did">${opts}</select></div>
+    </div>
+    <div class="g2">
+      <div class="fld"><label>Teléfono</label><input type="text" id="na_tel" placeholder="+52 000 000 0000"/></div>
+      <div class="fld"><label>Email</label><input type="email" id="na_email" placeholder="correo@ejemplo.com"/></div>
+    </div>
+    <div style="display:flex;gap:.65rem;margin-top:.2rem">
+      <button class="btn bg" onclick="adminTab('asesores')">← Volver</button>
+      <button class="btn bs bfull" onclick="admAddSave()">&#128190; Crear Asesor</button>
+    </div>
+  </div>`;
+}
+async function admAddSave(){
+  const nom=g('na_nom')?.value.trim();
+  const pin=g('na_pin')?.value.trim();
+  const did=g('na_did')?.value;
+  const tel=g('na_tel')?.value.trim();
+  const email=g('na_email')?.value.trim();
+  if(!nom||!pin){toast('Nombre y PIN requeridos','er');return;}
+  const btn=document.querySelector('[onclick="admAddSave()"]');
+  if(btn){btn.disabled=true;btn.innerHTML='⏳ Guardando...';}
+  try{
+    const res=await apiPost('createUsuario',{nombre:nom,pin,rol:'Asesor',dist_id:did,activo:'true',telefono:tel,email});
+    const newV={id:res.id||('V'+uid()),nombre:nom,pin,dist_id:did,activo:true,telefono:tel,email};
+    const c=getCfg();c.vendedores.push(newV);CACHE.cfg=c;
+    toast('✅ Asesor creado','ok');adminTab('asesores');
+  }catch(e){
+    if(btn){btn.disabled=false;btn.innerHTML='&#128190; Crear Asesor';}
+    toast('❌ '+e.message,'er');
+  }
+}
+function admAddDist(){
+  app.innerHTML=`<div class="card">
+    <div class="chd"><div class="chi chi-g">&#127962;</div><div class="cht">Nueva Distribución</div></div>
+    <div class="fld"><label>Nombre de la distribución</label><input type="text" id="nd_nom" placeholder="Distribución Ciudad"/></div>
+    <div class="g2">
+      <div class="fld"><label>Nombre del Líder</label><input type="text" id="nd_lider" placeholder="Nombre Apellido"/></div>
+      <div class="fld"><label>WhatsApp Líder</label><input type="text" id="nd_wa" placeholder="529381640475"/></div>
+    </div>
+    <div class="fld"><label>Contraseña Distribuidor</label><input type="text" id="nd_pw" placeholder="Contraseña..."/></div>
+    <div style="display:flex;gap:.65rem;margin-top:.2rem">
+      <button class="btn bg" onclick="adminTab('dists')">← Volver</button>
+      <button class="btn bs bfull" onclick="admAddDistSave()">&#128190; Crear Distribución</button>
+    </div>
+  </div>`;
+}
+async function admAddDistSave(){
+  const nom=g('nd_nom')?.value.trim();
+  const lider=g('nd_lider')?.value.trim();
+  const wa=g('nd_wa')?.value.trim();
+  const pw=g('nd_pw')?.value.trim();
+  if(!nom||!pw){toast('Nombre y contraseña requeridos','er');return;}
+  const btn=document.querySelector('[onclick="admAddDistSave()"]');
+  if(btn){btn.disabled=true;btn.innerHTML='⏳ Guardando...';}
+  try{
+    const res=await apiPost('createDistribucion',{nombre:nom,manager_nombre:lider,manager_wa:wa,password:pw});
+    const c=getCfg();c.distribuciones.push({id:res.id||('D'+uid()),nombre:nom,manager_nombre:lider||'',manager_wa:wa||'',password:pw});CACHE.cfg=c;
+    toast('✅ Distribución creada','ok');adminTab('dists');
+  }catch(e){
+    if(btn){btn.disabled=false;btn.innerHTML='&#128190; Crear Distribución';}
+    toast('❌ '+e.message,'er');
+  }
+}
+function admEditDist(did){
+  const cfg=getCfg(),d=cfg.distribuciones.find(x=>x.id===did);
+  if(!d)return;
+  app.innerHTML=`<div class="card">
+    <div class="chd"><div class="chi chi-g">✏️</div><div class="cht">Editar Distribución</div></div>
+    <div class="fld"><label>Nombre</label><input type="text" id="ed_nom" value="${d.nombre}"/></div>
+    <div class="g2">
+      <div class="fld"><label>Nombre del Líder</label><input type="text" id="ed_lider" value="${d.manager_nombre}"/></div>
+      <div class="fld"><label>WhatsApp Líder</label><input type="text" id="ed_wa" value="${d.manager_wa||''}"/></div>
+    </div>
+    <div class="fld"><label>Contraseña Distribuidor</label><input type="text" id="ed_pw" value="${d.password}"/></div>
+    <div style="display:flex;gap:.65rem;margin-top:.2rem">
+      <button class="btn bg" onclick="adminTab('dists')">← Volver</button>
+      <button class="btn bs bfull" onclick="admEditDistSave('${did}')">&#128190; Guardar</button>
+    </div>
+  </div>`;
+}
+async function admEditDistSave(did){
+  const nom=g('ed_nom')?.value.trim();
+  const lider=g('ed_lider')?.value.trim();
+  const wa=g('ed_wa')?.value.trim();
+  const pw=g('ed_pw')?.value.trim();
+  if(!nom){toast('Nombre requerido','er');return;}
+  const btn=document.querySelector(`[onclick="admEditDistSave('${did}')"]`);
+  if(btn){btn.disabled=true;btn.innerHTML='⏳ Guardando...';}
+  try{
+    await apiPost('updateDistribucion',{id:did,nombre:nom,manager_nombre:lider,manager_wa:wa,password:pw});
+    const c=getCfg(),d=c.distribuciones.find(x=>x.id===did);
+    if(d){d.nombre=nom;d.manager_nombre=lider||'';d.manager_wa=wa||'';if(pw)d.password=pw;CACHE.cfg=c;}
+    toast('✅ Distribución actualizada','ok');adminTab('dists');
+  }catch(e){
+    if(btn){btn.disabled=false;btn.innerHTML='&#128190; Guardar';}
+    toast('❌ '+e.message,'er');
+  }
+}
+function admAddMesa(){
+  const cfg=getCfg();
+  const dOpts=cfg.distribuciones.map(d=>`<option value="${d.id}">${d.nombre}</option>`).join('');
+  app.innerHTML=`<div class="card">
+    <div class="chd"><div class="chi chi-a">✅</div><div class="cht">Nueva Mesa de Control</div></div>
+    <div class="fld"><label>Nombre de la Mesa</label><input type="text" id="nm_nom" placeholder="Mesa Central"/></div>
+    <div class="fld"><label>Contraseña</label><input type="text" id="nm_pw" placeholder="Contraseña..."/></div>
+    <div class="fld"><label>Distribuciones asignadas</label>
+      <select id="nm_dids" multiple style="height:120px">${dOpts}</select>
+      <div class="fhint">Ctrl+clic para seleccionar varias</div>
+    </div>
+    <div style="display:flex;gap:.65rem;margin-top:.2rem">
+      <button class="btn bg" onclick="adminTab('config')">← Volver</button>
+      <button class="btn bs bfull" onclick="admAddMesaSave()">&#128190; Crear Mesa</button>
+    </div>
+  </div>`;
+}
+async function admAddMesaSave(){
+  const nom=g('nm_nom')?.value.trim();
+  const pw=g('nm_pw')?.value.trim();
+  const sel=g('nm_dids');
+  const dids=sel?[...sel.selectedOptions].map(o=>o.value):[];
+  if(!nom||!pw){toast('Nombre y contraseña requeridos','er');return;}
+  const btn=document.querySelector('[onclick="admAddMesaSave()"]');
+  if(btn){btn.disabled=true;btn.innerHTML='⏳ Guardando...';}
+  try{
+    const res=await apiPost('createMesa',{nombre:nom,password:pw,distribuciones:dids.join(',')});
+    const c=getCfg();c.mesas.push({id:res.id||('MC'+uid()),nombre:nom,password:pw,distribuciones:dids});CACHE.cfg=c;
+    toast('✅ Mesa creada','ok');adminTab('config');
+  }catch(e){
+    if(btn){btn.disabled=false;btn.innerHTML='&#128190; Crear Mesa';}
+    toast('❌ '+e.message,'er');
+  }
+}
 function admClear(){if(!confirm('¿Eliminar TODOS los reportes y ventas? Irreversible.'))return;LS.set('di_reps',[]);LS.set('di_sales',[]);toast('Datos eliminados','ok');adminTab('reportes');}
-function admSave(){
+async function admSave(){
   const c=getCfg();
   const ap=g('ca_pw')?.value?.trim();if(ap)c.admin_password=ap;
-  c.distribuciones.forEach(d=>{
+  let ok=true;
+  for(const d of c.distribuciones){
     const mn=g('cm_'+d.id)?.value?.trim();const cw=g('cw_'+d.id)?.value;const cp=g('cp_'+d.id)?.value?.trim();
-    if(mn)d.manager_nombre=mn;if(typeof cw!=='undefined')d.manager_wa=cw.trim();if(cp)d.password=cp;
-  });
-  c.mesas.forEach(m=>{const el=g('cmp_'+m.id);if(el&&el.value.trim())m.password=el.value.trim();});
-  LS.set('di_cfg',c);toast('✅ Configuración guardada','ok');
+    const changed=(mn&&mn!==d.manager_nombre)||(cw?.trim()!==d.manager_wa)||(cp&&cp!==d.password);
+    if(changed){
+      try{
+        await apiPost('updateDistribucion',{id:d.id,nombre:d.nombre,manager_nombre:mn||d.manager_nombre,manager_wa:cw?.trim()||d.manager_wa||'',password:cp||d.password});
+        if(mn)d.manager_nombre=mn;if(typeof cw!=='undefined')d.manager_wa=cw.trim();if(cp)d.password=cp;
+      }catch(e){toast('❌ Error en '+d.nombre+': '+e.message,'er');ok=false;}
+    }
+  }
+  for(const m of c.mesas){
+    const el=g('cmp_'+m.id);const np=el?.value.trim();
+    if(np&&np!==m.password){
+      try{
+        await apiPost('updateMesa',{id:m.id,nombre:m.nombre,password:np,distribuciones:m.distribuciones.join(',')});
+        m.password=np;
+      }catch(e){toast('❌ Error en '+m.nombre+': '+e.message,'er');ok=false;}
+    }
+  }
+  CACHE.cfg=c;
+  if(ok)toast('✅ Configuración guardada','ok');
 }
 
 // ── BOOT — conecta con Google Sheets al cargar ───────────────
