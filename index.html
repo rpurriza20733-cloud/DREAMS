@@ -1,4 +1,4 @@
-<\!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="es">
 <head>
 <meta charset="UTF-8"/>
@@ -934,10 +934,23 @@ function updateSaleRows(){
   det.style.display='block';
   let html='';
   for(let i=1;i<=count;i++){
-    html+=`<div class="srow" style="animation-delay:${i*0.03}s">
-      <div class="srn">${i}</div>
-      <input type="text" id="sc_${i}" placeholder="Nombre del cliente"/>
-      <input type="number" id="sm_${i}" placeholder="Monto $" min="0" oninput="calcST(${count})"/>
+    html+=`<div class="srow" style="animation-delay:${i*0.03}s;display:flex;align-items:flex-start;gap:.42rem">
+      <div class="srn" style="margin-top:.4rem">${i}</div>
+      <div style="flex:1">
+        <div style="display:flex;gap:.4rem;margin-bottom:.3rem">
+          <input type="text" id="sc_${i}" placeholder="Nombre del cliente" style="flex:1"/>
+          <input type="number" id="sm_${i}" placeholder="Monto $" min="0" style="width:100px" oninput="calcST(${count})"/>
+        </div>
+        <label style="font-size:.72rem;font-weight:600;color:var(--s600);display:flex;align-items:center;gap:.28rem;cursor:pointer">
+          <input type="checkbox" id="sa_${i}" onchange="document.getElementById('saf_'+${i}).style.display=this.checked?'inline-block':'none'"/>
+          Anticipo recibido
+          <select id="saf_${i}" style="display:none;font-size:.72rem;padding:.2rem .4rem;border:1.5px solid var(--s200);border-radius:6px;margin-left:.3rem">
+            <option value="Efectivo">Efectivo</option>
+            <option value="Transferencia">Transferencia</option>
+            <option value="Tarjeta">Tarjeta</option>
+          </select>
+        </label>
+      </div>
     </div>`;
   }
   rows.innerHTML=html; calcST(count);
@@ -963,7 +976,9 @@ async function submitReporte(){
   for(let i=1;i<=ventas;i++){
     const cl=(g('sc_'+i)?.value||'').trim()||`Cliente ${i}`;
     const mo=parseInt(g('sm_'+i)?.value)||0;
-    totalMonto+=mo; salesArr.push({cliente:cl,monto:mo});
+    const ant=g('sa_'+i)?.checked||false;
+    const af=g('saf_'+i)?.value||'Efectivo';
+    totalMonto+=mo; salesArr.push({cliente:cl,monto:mo,anticipo:ant,anticipo_forma:af});
   }
   const btnSub=document.querySelector('[onclick="submitReporte()"]');
   if(btnSub){btnSub.disabled=true;btnSub.innerHTML='⏳ Guardando en Google Sheets...';}
@@ -977,7 +992,7 @@ async function submitReporte(){
     });
     const repId=result.id||uid();
     if(salesArr.length>0){
-      await apiPost('createVentas',{
+      const vRes=await apiPost('createVentas',{
         reporte_id:repId,
         ventas:salesArr.map(s=>({
           cliente:s.cliente,monto:s.monto,
@@ -985,6 +1000,26 @@ async function submitReporte(){
           dist_id:v.dist_id||'',dist_nombre:dist?dist.nombre:'',fecha
         }))
       });
+      const vIds=vRes.ids||[];
+      for(let ai=0;ai<salesArr.length;ai++){
+        if(salesArr[ai].anticipo&&salesArr[ai].monto>0){
+          try{
+            const aRes=await apiPost('createAnticipo',{
+              vendedor_id:vid,vendedor_nombre:v.nombre,
+              dist_id:v.dist_id||'',dist_nombre:dist?dist.nombre:'',
+              venta_id:vIds[ai]||'',monto:salesArr[ai].monto,
+              forma_pago:salesArr[ai].anticipo_forma,status:'pendiente',
+              fecha,notas:'Anticipo al momento de la venta'
+            });
+            CACHE.anticips.push({id:aRes.id||uid(),vendedor_id:vid,vendedor_nombre:v.nombre,
+              dist_id:v.dist_id||'',dist_nombre:dist?dist.nombre:'',
+              venta_id:vIds[ai]||'',monto:salesArr[ai].monto,
+              forma_pago:salesArr[ai].anticipo_forma,status:'pendiente',
+              fecha,mesa_id:'',mesa_nombre:'',ts:Date.now(),
+              notas:'Anticipo al momento de la venta'});
+          }catch(ae){console.warn('Anticipo err:',ae.message);}
+        }
+      }
     }
     const rep={id:repId,vendedor_id:vid,vendedor_nombre:v.nombre,dist_id:v.dist_id||'',dist_nombre:dist?dist.nombre:'',fecha,ts,programas_regalo,contactos,citas,citas_dia,demos,ventas,monto:totalMonto,comentarios};
     CACHE.reps.push(rep);
@@ -1159,13 +1194,26 @@ function distResumen(){
   const pc=['p1','p2','p3'];
   const pods=ranked.map((r,i)=>`<div class="pcol"><div class="pbar ${pc[i]}" style="height:${Math.max(25,Math.round(r.va/maxV*115))}px"><span class="prk">#${i+1}</span></div><div class="pnm">${r.v.nombre.split(' ')[0]}</div><div class="pvo">${fmt(r.va)}</div></div>`).join('');
 
+  const k=aggKPIs(fReps,fSales);
+  const distNombre=S.name||'Mi Distribución';
   app.innerHTML=`
   ${fbar('distResumen')}
+  <div class="card" style="background:linear-gradient(135deg,#4f46e5 0%,#7c3aed 100%);color:#fff;padding:1rem 1.1rem">
+    <div style="font-size:.68rem;font-weight:700;text-transform:uppercase;opacity:.75;letter-spacing:.05em">Distribución</div>
+    <div style="font-size:1.15rem;font-weight:800;margin:.2rem 0 .05rem">${distNombre}</div>
+    <div style="font-size:.72rem;opacity:.8">${vends.length} asesores activos &middot; ${repHoy} reportes hoy</div>
+  </div>
   <div class="mets4">
     <div class="met"><div class="mval">${repHoy}/${vends.length}</div><div class="mlbl">Rep. Hoy</div></div>
     <div class="met mg"><div class="mval">${fmt(volHoy)}</div><div class="mlbl">Vol. Hoy</div></div>
     <div class="met mb"><div class="mval">${fmt(volAp)}</div><div class="mlbl">Aprobado</div></div>
     <div class="met"><div class="mval">${pctAp}%</div><div class="mlbl">% Aprob.</div></div>
+  </div>
+  <div class="mets4" style="margin-top:-.3rem">
+    <div class="met"><div class="mval">${fmtN(k.contactos)}</div><div class="mlbl">Contactos</div></div>
+    <div class="met"><div class="mval">${fmtN(k.citas)}</div><div class="mlbl">Citas</div></div>
+    <div class="met"><div class="mval">${fmtN(k.demos)}</div><div class="mlbl">Demos</div></div>
+    <div class="met"><div class="mval">${k.conv_dv}%</div><div class="mlbl">Demo→Vta</div></div>
   </div>
   <div class="card"><div class="chd"><div class="chi chi-a">🏆</div><div class="cht">Top Asesores</div></div>
     <div class="podium">${pods||'<div class="empty">Sin datos en este período</div>'}</div>
@@ -1213,7 +1261,7 @@ function distEquipo(){
   app.innerHTML=`
   ${fbar('distEquipo')}
   <div class="card">
-    <div class="chd"><div class="chi chi-b">👥</div><div class="cht">Estado del Equipo</div></div>
+    <div class="chd"><div class="chi chi-b">👥</div><div class="cht">Estado del Equipo</div><button class="btn bg bxs" style="margin-left:auto" onclick="distAgregarAsesor()">➕ Asesor</button></div>
     <div class="twrap"><table class="tbl">
       <thead><tr><th>Asesor</th><th>Hoy</th><th>Cont.</th><th>Citas</th><th>Demos</th><th>Ventas</th><th>Vol.</th><th>Aprob.</th><th>%</th></tr></thead>
       <tbody>${rows||'<tr><td colspan="9" class="empty">Sin datos</td></tr>'}</tbody>
@@ -1221,6 +1269,39 @@ function distEquipo(){
   </div>`;
 }
 
+function distAgregarAsesor(){
+  app.innerHTML=`<div class="card">
+    <div class="chd"><div class="chi chi-g">&#128100;</div><div class="cht">Agregar Asesor a ${S.name}</div></div>
+    <div class="fld"><label>Nombre completo</label><input type="text" id="da_nom" placeholder="Nombre del asesor"/></div>
+    <div class="fld"><label>PIN de acceso (4-8 d&#237;gitos)</label><input type="text" id="da_pin" placeholder="1234" maxlength="8"/></div>
+    <div class="fld"><label>Tel&#233;fono (opcional)</label><input type="tel" id="da_tel" placeholder="55 1234 5678"/></div>
+    <div class="fld"><label>Correo electr&#243;nico (opcional)</label><input type="email" id="da_email" placeholder="asesor@correo.com"/></div>
+    <div style="display:flex;gap:.65rem;margin-top:.8rem">
+      <button class="btn bw" onclick="distEquipo()">&#8592; Cancelar</button>
+      <button class="btn bs bfull" onclick="distAgregarAsesorSave()">&#128190; Agregar Asesor</button>
+    </div>
+  </div>`;
+}
+async function distAgregarAsesorSave(){
+  const nom=g('da_nom')?.value.trim();
+  const pin=g('da_pin')?.value.trim();
+  const tel=g('da_tel')?.value.trim();
+  const email=g('da_email')?.value.trim();
+  if(!nom||!pin){toast('Nombre y PIN requeridos','er');return;}
+  const btn=document.querySelector('[onclick="distAgregarAsesorSave()"]');
+  if(btn){btn.disabled=true;btn.innerHTML='&#9203; Guardando...';}
+  try{
+    const res=await apiPost('createUsuario',{nombre:nom,pin,rol:'Asesor',dist_id:S.id,activo:'true',telefono:tel,email});
+    const c=getCfg();
+    c.vendedores.push({id:res.id||('V'+uid()),nombre:nom,pin,dist_id:S.id,activo:true,telefono:tel,email});
+    CACHE.cfg=c;
+    await reloadCacheConfig();
+    toast('✅ Asesor agregado a '+S.name,'ok');distEquipo();
+  }catch(e){
+    if(btn){btn.disabled=false;btn.innerHTML='&#128190; Agregar Asesor';}
+    toast('❌ '+e.message,'er');
+  }
+}
 function distKpis(){
   setTab('dk');
   const did=S.id;
@@ -1602,8 +1683,15 @@ function adminDash(){
   app.innerHTML=`
   ${fbar('adminDash',true,true)}
 
+  <div class="mets4" style="margin-bottom:0">
+    <div class="met"><div class="mval" style="color:#6366f1">${sales.filter(s=>s.status==='en_verificacion').length}</div><div class="mlbl">En Verif.</div></div>
+    <div class="met mg"><div class="mval">${sales.filter(s=>s.status==='aprobada'||s.status==='pre_archivada').length}</div><div class="mlbl">Aprobadas</div></div>
+    <div class="met" style="background:#fef2f2"><div class="mval" style="color:#dc2626">${sales.filter(s=>s.status==='rechazada').length}</div><div class="mlbl">Rechazadas</div></div>
+    <div class="met mb"><div class="mval">${CACHE.anticips.length}</div><div class="mlbl">Anticipos</div></div>
+  </div>
+
   <div class="card">
-    <div class="chd"><div class="chi chi-b">📊</div><div><div class="cht">KPIs Globales</div><div class="chs">${reps.length} reportes en el período</div></div></div>
+    <div class="chd"><div class="chi chi-b">&#128202;</div><div><div class="cht">KPIs Globales</div><div class="chs">${reps.length} reportes en el período</div></div></div>
     ${kpiCardsHTML(k)}
   </div>
 
@@ -1803,7 +1891,7 @@ async function admAddSave(){
     const res=await apiPost('createUsuario',{nombre:nom,pin,rol:'Asesor',dist_id:did,activo:'true',telefono:tel,email});
     const newV={id:res.id||('V'+uid()),nombre:nom,pin,dist_id:did,activo:true,telefono:tel,email};
     const c=getCfg();c.vendedores.push(newV);CACHE.cfg=c;
-    toast('✅ Asesor creado','ok');adminTab('asesores');
+    toast('✅ Asesor creado','ok');await reloadCacheConfig();adminTab('asesores');
   }catch(e){
     if(btn){btn.disabled=false;btn.innerHTML='&#128190; Crear Asesor';}
     toast('❌ '+e.message,'er');
@@ -1835,7 +1923,7 @@ async function admAddDistSave(){
   try{
     const res=await apiPost('createDistribucion',{nombre:nom,manager_nombre:lider,manager_wa:wa,password:pw});
     const c=getCfg();c.distribuciones.push({id:res.id||('D'+uid()),nombre:nom,manager_nombre:lider||'',manager_wa:wa||'',password:pw});CACHE.cfg=c;
-    toast('✅ Distribución creada','ok');adminTab('dists');
+    toast('✅ Distribución creada','ok');await reloadCacheConfig();adminTab('dists');
   }catch(e){
     if(btn){btn.disabled=false;btn.innerHTML='&#128190; Crear Distribución';}
     toast('❌ '+e.message,'er');
@@ -1904,7 +1992,7 @@ async function admAddMesaSave(){
   try{
     const res=await apiPost('createMesa',{nombre:nom,password:pw,distribuciones:dids.join(',')});
     const c=getCfg();c.mesas.push({id:res.id||('MC'+uid()),nombre:nom,password:pw,distribuciones:dids});CACHE.cfg=c;
-    toast('✅ Mesa creada','ok');adminTab('config');
+    toast('✅ Mesa creada','ok');await reloadCacheConfig();adminTab('config');
   }catch(e){
     if(btn){btn.disabled=false;btn.innerHTML='&#128190; Crear Mesa';}
     toast('❌ '+e.message,'er');
